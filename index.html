@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Chiang Mai · Sales Dashboard</title>
+<title>Chiang Mai · Sales Dashboard (Google Sheets)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -59,6 +59,13 @@ select{background:var(--card);border:1px solid var(--border2);color:var(--text);
 select:focus{outline:none;border-color:var(--accent)}
 .fg{display:flex;align-items:center;gap:6px}
 .fcount{font-size:11px;color:var(--muted);margin-left:auto;padding:0 4px}
+.tbar{display:flex;gap:8px;align-items:center;margin-left:10px;flex-wrap:wrap}
+.tpill{display:flex;gap:8px;align-items:baseline;padding:6px 10px;border-radius:10px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10)}
+.tpill .tl{font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);font-weight:800}
+.tpill .tv{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--text)}
+.tpill .td{font-size:10px;font-weight:800}
+.td.up{color:var(--green)}.td.dn{color:var(--red)}.td.nu{color:var(--muted)}
 
 /* MAIN */
 .main{padding:18px 24px;max-width:1800px;margin:0 auto;position:relative;z-index:1}
@@ -294,6 +301,11 @@ select:focus{outline:none;border-color:var(--accent)}
   <div class="fg"><span class="flabel">Status</span><select id="f-status" onchange="applyFilters()"><option value="-1">All</option><option value="0">Completed</option><option value="1">Cancelled</option></select></div>
   <button class="btn" onclick="resetFilters()" style="margin-left:auto">✕ Reset</button>
   <div class="fcount" id="fcount"></div>
+  <div class="tbar" id="totals-bar" style="display:none">
+    <div class="tpill" id="tp-total"></div>
+    <div class="tpill" id="tp-weekly"></div>
+    <div class="tpill" id="tp-food"></div>
+  </div>
 </div>
 
 <div class="main">
@@ -301,6 +313,18 @@ select:focus{outline:none;border-color:var(--accent)}
   <div class="kpi-strip" id="kpi-strip"></div>
   <div class="sec-label">Daily Performance (up to 7 days)</div>
   <div class="day-cards" id="day-cards"></div>
+
+  <div class="sec-label">Weekly Performance (Sales sum)</div>
+  <div class="crow c2" style="margin-bottom:13px">
+    <div class="cc">
+      <div class="cc-hd"><div><div class="cc-title">Weekly Net Sales</div><div class="cc-sub">Summed from Sales rows (Mon–Sun)</div></div></div>
+      <canvas id="weekChart" height="165"></canvas>
+    </div>
+    <div class="cc">
+      <div class="cc-hd"><div><div class="cc-title">Weekly Table</div><div class="cc-sub">Net sales · orders · avg order · tip %</div></div></div>
+      <div id="weekly-tbl" style="overflow-x:auto"></div>
+    </div>
+  </div>
 
   <!-- ROW 1: Trend + Metrics + Tip -->
   <div class="crow c3" style="margin-bottom:13px">
@@ -401,9 +425,25 @@ select:focus{outline:none;border-color:var(--accent)}
 <div class="modal-ov" id="gs-modal">
   <div class="modal">
     <h3>🔗 Connect Google Sheets</h3>
-    <p>Publish your sheet as CSV (File → Share → Publish to web → CSV), then paste the Sheet ID here. The dashboard will merge live data with the embedded historical data.<br><br>Required columns: <strong>Date, Time, Store, Sales Type, Channel, Sub-total, Fees, Tips, Status</strong></p>
-    <input type="text" id="gs-id" placeholder="Sheet ID (from the URL between /d/ and /edit)"/>
-    <input type="text" id="gs-tab" placeholder="Tab name (e.g. 2026)" value="2026"/>
+    <p>Paste your <strong>published CSV link</strong> or your <strong>Sheet ID</strong> — both work.<br><br>
+    <span style="font-size:11px;color:#60a5fa;font-weight:600">Option A — Published CSV URL</span><br>
+    <span style="font-size:11px;color:#a0aec0">File → Share → Publish to web → select tab → Comma-separated values → Publish → copy the full URL</span><br><br>
+    <span style="font-size:11px;color:#60a5fa;font-weight:600">Option B — Sheet ID + tab name</span><br>
+    <span style="font-size:11px;color:#a0aec0">Copy the ID from your browser URL between /d/ and /edit, then enter the tab name below</span></p>
+    <input type="text" id="gs-id" placeholder="Paste published CSV URL  —or—  Sheet ID"/>
+    <input type="text" id="gs-api-key" placeholder="(Optional) Google Sheets API key (recommended for reliable connection)"/>
+    <div style="display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0 4px">
+      <input type="text" id="gs-tab-sales" placeholder="Sales tab name (default: Sales)" value="Sales"/>
+      <input type="text" id="gs-tab-weekly" placeholder="Weekly summary tab name (default: Weekly Summary)" value="Weekly Summary"/>
+      <input type="text" id="gs-tab-food" placeholder="Food cost tab name (default: Food Cost)" value="Food Cost"/>
+    </div>
+    <div style="font-size:11px;color:#60a5fa;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;">
+      💡 Best: make the sheet public (Anyone with link → Viewer). Sheet ID + API key is most reliable, but the dashboard can also try loading tabs via CSV without an API key.
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted2);margin:6px 0 2px;user-select:none">
+      <input type="checkbox" id="gs-autoconnect" style="accent-color:#60a5fa" checked>
+      Auto-connect next time
+    </label>
     <div class="gs-loading" id="gs-loading">⟳ Connecting…</div>
     <div class="modal-btns">
       <button class="btn" onclick="closeGS()">Cancel</button>
@@ -443,19 +483,50 @@ const CH_LBLS  = ['POS','UberEats','Online','Kiosk'];
 
 let charts = {};
 let daily  = [];
-let gsId   = localStorage.getItem('gs_id')||'';
-let gsTab  = localStorage.getItem('gs_tab')||'2026';
+const LS_PREFIX = 'cm_live_';
+const lsGet = (k, d='') => { try{ const v=localStorage.getItem(LS_PREFIX+k); return (v==null?d:v); }catch(e){ return d; } };
+const lsSet = (k, v) => { try{ localStorage.setItem(LS_PREFIX+k, v); }catch(e){} };
+
+const DEFAULT_GS_ID = 'https://docs.google.com/spreadsheets/d/1gpfQdwdihLh9Xb_KJFN2D6--B_hpTsSRAz7zU-rid3U/edit?usp=sharing';
+let gsId   = lsGet('gs_id', DEFAULT_GS_ID);
+let gsApiKey = lsGet('gs_api_key','');
+let gsTabSales  = lsGet('gs_tab_sales','Sales');
+let gsTabWeekly = lsGet('gs_tab_weekly','Weekly Summary');
+let gsTabFood   = lsGet('gs_tab_food','Food Cost');
 let gsOn   = false;
+let __GS_CONNECTING__ = false;
 let AF     = {month:'',week:'',store:-1,type:-1,chan:-1,status:-1};
 
 // ═══════════════════════════════════════════════════
 // INIT FILTERS
 // ═══════════════════════════════════════════════════
 function initFilters(){
+  const clearSelect=(id)=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    while(el.options.length>1) el.remove(1);
+  };
+  clearSelect('f-month');
+  clearSelect('f-week');
+  clearSelect('f-store');
+  clearSelect('f-type');
+  clearSelect('f-chan');
+
   const fm=document.getElementById('f-month');
   META.months.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textContent=MNAMES[m]||m;fm.appendChild(o);});
   const fw=document.getElementById('f-week');
-  META.weeks.forEach((w,i)=>{const o=document.createElement('option');o.value=i;o.textContent='Wk '+((WNAMES[w])||w);fw.appendChild(o);});
+  const fmtW=(ws)=>{
+    const start=new Date(ws);
+    const end=new Date(start); end.setDate(start.getDate()+6);
+    const iso=d=>d.toISOString().substring(0,10);
+    return `${iso(start)} → ${iso(end)}`; // 7 days
+  };
+  META.weeks.forEach((w,i)=>{
+    const o=document.createElement('option');
+    o.value=i;
+    o.textContent='Wk '+((WNAMES[w])||fmtW(w));
+    fw.appendChild(o);
+  });
   const fs=document.getElementById('f-store');
   META.stores.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent=s.replace(/\[\d+\]/,'').trim();fs.appendChild(o);});
   const ft=document.getElementById('f-type');
@@ -496,6 +567,153 @@ function getRows(){
 }
 
 // ═══════════════════════════════════════════════════
+// WEEKLY SUMMARY (optional tab)
+// ═══════════════════════════════════════════════════
+let __WEEKLY_INDEX__ = null;
+let __FOOD_INDEX__ = null;
+function toISODate(v){
+  if(v==null) return '';
+  const s=String(v).trim();
+  if(!s) return '';
+  // If already ISO-like date string
+  const m=s.match(/(\\d{4}-\\d{2}-\\d{2})/);
+  if(m) return m[1];
+  // Try parse other formats
+  const d=new Date(s);
+  if(!isNaN(d)) return d.toISOString().substring(0,10);
+  return '';
+}
+function num2(v){
+  if(v==null) return 0;
+  const s=String(v).trim();
+  if(!s) return 0;
+  const neg=/^\\(.*\\)$/.test(s);
+  const cleaned=s.replace(/[^\d.\-]/g,'');
+  const n=parseFloat(cleaned);
+  if(isNaN(n)) return 0;
+  return neg?-n:n;
+}
+function buildWeeklyIndex(){
+  if(__WEEKLY_INDEX__) return __WEEKLY_INDEX__;
+  const rows = Array.isArray(window.__GS_WEEKLY__) ? window.__GS_WEEKLY__ : [];
+  if(!rows.length){ __WEEKLY_INDEX__ = new Map(); return __WEEKLY_INDEX__; }
+  const hdr = (rows[0]||[]).map(h=>String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_'));
+  const gi=k=>hdr.findIndex(h=>h===k || h.includes(k));
+  const wStartI=(gi('week_start')>=0?gi('week_start'):gi('week'));
+  const wEndI=gi('week_end');
+  const locI=gi('location');
+  const nsI=gi('net_sales');
+  const ordI=gi('orders');
+  const guestI=gi('guest_count');
+  const avgI=gi('avg_check');
+  const tipsI=gi('tips');
+  const tipPctI=gi('tips_');
+  const discI=gi('discounts');
+  const refundI=gi('refunds');
+  const map = new Map();
+  rows.slice(1).forEach(r=>{
+    const weekStart=toISODate(r[wStartI]);
+    const weekEnd=toISODate(r[wEndI]);
+    const location=String(r[locI]||'').trim();
+    if(!weekStart || !location) return;
+    const key = weekStart + '|' + location;
+    map.set(key,{
+      weekStart,weekEnd,
+      location,
+      netSales:num2(r[nsI]),
+      orders:Math.round(num2(r[ordI])),
+      guestCount:Math.round(num2(r[guestI])),
+      avgCheck:num2(r[avgI]),
+      tips:num2(r[tipsI]),
+      tipPct:(tipPctI>=0?num2(r[tipPctI])*100:0), // sheet stores as fraction sometimes
+      discounts:num2(r[discI]),
+      refunds:num2(r[refundI]),
+    });
+  });
+  __WEEKLY_INDEX__ = map;
+  return __WEEKLY_INDEX__;
+}
+
+function pct2(v){
+  const n=num2(v);
+  if(!n) return 0;
+  // If value is a fraction (e.g. 0.32), convert to %
+  return (Math.abs(n) <= 1 ? n*100 : n);
+}
+
+function buildFoodIndex(){
+  if(__FOOD_INDEX__) return __FOOD_INDEX__;
+  const rows = Array.isArray(window.__GS_FOOD__) ? window.__GS_FOOD__ : [];
+  if(!rows.length){ __FOOD_INDEX__ = new Map(); return __FOOD_INDEX__; }
+  const hdr = (rows[0]||[]).map(h=>String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_'));
+  const gi=(k)=>hdr.findIndex(h=>h===k || h.includes(k));
+  const wStartI=(gi('week_start')>=0?gi('week_start'):gi('week'));
+  const wEndI=gi('week_end');
+  const locI=gi('location');
+  const amtI = [gi('food_cost'),gi('foodcost'),gi('cogs'),gi('purchases'),gi('total_food')].find(i=>i>=0) ?? -1;
+  const pctI = [gi('food_cost_pct'),gi('food_cost_percent'),gi('food_pct'),gi('cogs_pct')].find(i=>i>=0) ?? -1;
+  const map=new Map();
+  rows.slice(1).forEach(r=>{
+    const weekStart=toISODate(r[wStartI]);
+    const weekEnd=toISODate(r[wEndI]);
+    const location=String(r[locI]||'').trim();
+    if(!weekStart || !location) return;
+    map.set(weekStart+'|'+location,{
+      weekStart,weekEnd,location,
+      foodCost:(amtI>=0?num2(r[amtI]):0),
+      foodPct:(pctI>=0?pct2(r[pctI]):0),
+    });
+  });
+  __FOOD_INDEX__ = map;
+  return __FOOD_INDEX__;
+}
+
+function getFoodMatch(){
+  if(AF.week==='') return null;
+  const rawWeekStart = META.weeks[parseInt(AF.week)];
+  if(!rawWeekStart) return null;
+  const weekStart = rawWeekStart;
+  const store = AF.store>=0 ? (META.stores[AF.store]||'') : null;
+  const map = buildFoodIndex();
+  if(!map.size) return null;
+  if(store){
+    return map.get(weekStart + '|' + store) || null;
+  }
+  const matches=[];
+  for(const v of map.values()){ if(v.weekStart===weekStart) matches.push(v); }
+  if(!matches.length) return null;
+  const sum=(k)=>matches.reduce((s,m)=>s+(m[k]||0),0);
+  const foodCost=sum('foodCost');
+  const weekEnd = matches.find(m=>m.weekEnd)?.weekEnd || '';
+  return {weekStart,weekEnd,location:'All Locations',foodCost,foodPct:0};
+}
+function getWeeklyMatch(){
+  // Only meaningful when a single week is selected; location is optional
+  if(AF.week==='') return null;
+  const rawWeekStart = META.weeks[parseInt(AF.week)];
+  if(!rawWeekStart) return null;
+  const weekStart = rawWeekStart;
+  if(!weekStart) return null;
+  const store = AF.store>=0 ? (META.stores[AF.store]||'') : null;
+  const map = buildWeeklyIndex();
+  if(!map.size) return null;
+  if(store){
+    return map.get(weekStart + '|' + store) || null;
+  }
+  // If "All locations", sum across locations for the week
+  const matches=[];
+  for(const v of map.values()){ if(v.weekStart===weekStart) matches.push(v); }
+  if(!matches.length) return null;
+  const sum=(k)=>matches.reduce((s,m)=>s+(m[k]||0),0);
+  const netSales=sum('netSales');
+  const orders=Math.round(sum('orders'));
+  const tips=sum('tips');
+  const avgCheck = orders?netSales/orders:0;
+  const weekEnd = matches.find(m=>m.weekEnd)?.weekEnd || '';
+  return {weekStart,weekEnd,location:'All Locations',netSales,orders,guestCount:orders,avgCheck,tips};
+}
+
+// ═══════════════════════════════════════════════════
 // BUILD DASHBOARD
 // ═══════════════════════════════════════════════════
 function buildDash(){
@@ -531,44 +749,99 @@ function buildDash(){
 
   const totNS  = rows.reduce((s,r)=>s+r[6],0);
   const totTip = rows.reduce((s,r)=>s+r[7],0);
+  const totFee = rows.reduce((s,r)=>s+r[8],0);
   const totN   = rows.length;
   const totAvg = totN?totNS/totN:0;
   const totTP  = totNS?totTip/totNS*100:0;
 
-  updateHeader(allDates,totNS,totN);
-  buildKPIs(totNS,totN,totAvg,totTP,totTip);
+  const wk = getWeeklyMatch();
+  const food = getFoodMatch();
+  const ns = wk ? wk.netSales : totNS;
+  const n  = wk ? wk.orders : totN;
+  const avg = wk ? (wk.avgCheck || (n?ns/n:0)) : totAvg;
+  const tips = wk ? (wk.tips || totTip) : totTip;
+  const fees = totFee;
+  const tp = ns ? (tips/ns*100) : (wk && wk.tipPct ? wk.tipPct : totTP);
+
+  const range = wk && wk.weekStart && wk.weekEnd ? {start:wk.weekStart,end:wk.weekEnd} : null;
+  updateHeader(allDates,ns,n,range);
+  buildKPIs(ns,n,avg,tp,tips,fees);
+  renderTotalsBar({totNS,totN,totTip,totFee}, wk, food, ns);
   buildDayCards();
+  buildWeeklyPerf();
   buildTrend();
   buildMetrics();
   buildTipChart();
   buildCats();
   buildPeak();
   buildDonuts();
-  buildExec(totNS,totN);
+  buildExec(ns,n);
+}
+
+function renderTotalsBar(total, wk, food, nsForPct){
+  const bar=document.getElementById('totals-bar');
+  const totalEl=document.getElementById('tp-total');
+  const weeklyEl=document.getElementById('tp-weekly');
+  const foodEl=document.getElementById('tp-food');
+  if(!bar||!totalEl||!weeklyEl||!foodEl) return;
+  const money=v=>'$'+(v||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  totalEl.innerHTML = `<div class="tl">Sales Data Total</div><div class="tv">${money(total.totNS)}</div><div class="tv">${total.totN.toLocaleString()} orders</div>`;
+
+  if(wk && wk.netSales!=null && wk.orders!=null){
+    const dn = total.totNS - wk.netSales;
+    const pct = wk.netSales ? (dn / wk.netSales * 100) : 0;
+    const cls = Math.abs(dn) < 0.01 ? 'nu' : dn>0 ? 'up' : 'dn';
+    const diffTxt = Math.abs(dn) < 0.01 ? 'match' : `${dn>0?'+':''}${money(dn)} (${pct>0?'+':''}${pct.toFixed(1)}%)`;
+    weeklyEl.innerHTML = `<div class="tl">Weekly Summary</div><div class="tv">${money(wk.netSales)}</div><div class="tv">${wk.orders.toLocaleString()} orders</div><div class="td ${cls}">${diffTxt}</div>`;
+    bar.style.display='flex';
+  }else{
+    const canLoad = gsOn && gsId && AF.week!=='' && typeof showPasteFallback==='function';
+    const loadLink = canLoad ? `<div class="td nu" style="cursor:pointer;text-decoration:underline" onclick="showPasteFallback(buildGSUrl(gsId,gsTabWeekly),'weekly')">Load Weekly Summary</div>` : `<div class="td nu">Check sharing / API key</div>`;
+    weeklyEl.innerHTML = `<div class="tl">Weekly Summary</div><div class="tv">Not loaded</div>${loadLink}`;
+    // only show bar when week selected (so it doesn't clutter "All Weeks")
+    bar.style.display = (AF.week!=='' ? 'flex' : 'none');
+  }
+
+  if(food && (food.foodCost!=null || food.foodPct!=null)){
+    const pct = food.foodPct ? food.foodPct : (nsForPct ? (food.foodCost/nsForPct*100) : 0);
+    const pctTxt = pct ? `${pct.toFixed(1)}%` : '—';
+    const costTxt = (food.foodCost && Math.abs(food.foodCost) > 0.0001) ? money(food.foodCost) : '—';
+    foodEl.innerHTML = `<div class="tl">Food Cost</div><div class="tv">${costTxt}</div><div class="td nu">${pctTxt}</div>`;
+    // Only show when week selected
+    bar.style.display = (AF.week!=='' ? 'flex' : bar.style.display);
+  }else{
+    const canLoad = gsOn && gsId && AF.week!=='' && typeof showPasteFallback==='function';
+    const loadLink = canLoad ? `<div class="td nu" style="cursor:pointer;text-decoration:underline" onclick="showPasteFallback(buildGSUrl(gsId,gsTabFood),'food')">Load Food Cost</div>` : `<div class="td nu">Check sharing / tab name</div>`;
+    foodEl.innerHTML = `<div class="tl">Food Cost</div><div class="tv">Not loaded</div>${loadLink}`;
+    if(AF.week==='') foodEl.innerHTML = '';
+  }
 }
 
 // ═══════════════════════════════════════════════════
 // HEADER
 // ═══════════════════════════════════════════════════
-function updateHeader(dates,ns,n){
+function updateHeader(dates,ns,n,range){
   const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const f=new Date(dates[0]),l=new Date(dates[dates.length-1]);
+  const start = range?.start || dates[0];
+  const end = range?.end || dates[dates.length-1];
+  const f=new Date(start),l=new Date(end);
+  const days = range?.start && range?.end ? (Math.round((l-f)/86400000)+1) : dates.length;
   document.getElementById('hdr-sub').textContent=
     MN[f.getMonth()]+' '+f.getDate()+' – '+MN[l.getMonth()]+' '+l.getDate()+', '+l.getFullYear()+
-    ' · '+dates.length+' days · '+n.toLocaleString()+' orders · $'+(ns/1000).toFixed(1)+'K net sales';
+    ' · '+days+' days · '+n.toLocaleString()+' orders · $'+(ns/1000).toFixed(1)+'K net sales';
 }
 
 // ═══════════════════════════════════════════════════
 // KPI STRIP
 // ═══════════════════════════════════════════════════
-function buildKPIs(ns,n,avg,tp,tips){
+function buildKPIs(ns,n,avg,tp,tips,fees){
   const kpis=[
     {label:'Total Net Sales',val:'$'+ns.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}),delta:null,sub:'Sum of sub-totals',c:'k0'},
     {label:'Total Orders',   val:n.toLocaleString(),delta:null,sub:'All order rows',c:'k1'},
     {label:'Avg Order Value',val:'$'+avg.toFixed(2),d:((avg/T.avg_order-1)*100).toFixed(1),sub:'vs $55 target',c:'k2'},
     {label:'Avg Tip %',      val:tp.toFixed(1)+'%',  d:(tp-T.tip_pct).toFixed(1), sub:'vs 8% target',isTip:true,c:'k3'},
     {label:'Tips Collected', val:'$'+tips.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}),delta:null,sub:'Total tips',c:'k4'},
-    {label:'Gross Rev (incl fees)',val:'$'+(ns+0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}),delta:null,sub:'Net sales excl fees',c:'k5'},
+    {label:'Gross Rev (incl fees)',val:'$'+(ns+(fees||0)).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}),delta:null,sub:'Net sales + fees',c:'k5'},
   ];
   document.getElementById('kpi-strip').innerHTML=kpis.map(k=>{
     let dHtml='';
@@ -804,6 +1077,89 @@ function buildDonuts(){
 }
 
 // ═══════════════════════════════════════════════════
+// WEEKLY PERFORMANCE (from Sales sum)
+// ═══════════════════════════════════════════════════
+function buildWeeklyAgg(rows){
+  const map = new Map();
+  rows.forEach(r=>{
+    const wIdx = r[1];
+    if(wIdx==null || wIdx<0) return;
+    const ws = META.weeks[wIdx];
+    if(!ws) return;
+    let m = map.get(ws);
+    if(!m){
+      m = {ws, ns:0, tips:0, fees:0, orders:0};
+      map.set(ws,m);
+    }
+    m.ns += (r[6]||0);
+    m.tips += (r[7]||0);
+    m.fees += (r[8]||0);
+    m.orders += 1;
+  });
+  const arr = Array.from(map.values()).sort((a,b)=>a.ws.localeCompare(b.ws));
+  return arr.map(w=>{
+    const start = new Date(w.ws);
+    const end = new Date(start); end.setDate(start.getDate()+6);
+    const iso = d=>d.toISOString().substring(0,10);
+    const avg = w.orders ? (w.ns / w.orders) : 0;
+    const tipPct = w.ns ? (w.tips / w.ns * 100) : 0;
+    return {
+      ws:w.ws,
+      we:iso(end),
+      ns:+w.ns.toFixed(2),
+      orders:w.orders,
+      avg:+avg.toFixed(2),
+      tipPct:+tipPct.toFixed(2),
+    };
+  });
+}
+
+function buildWeeklyPerf(){
+  destroyC('weekChart');
+  const tblEl=document.getElementById('weekly-tbl');
+  const canvas=document.getElementById('weekChart');
+  if(!tblEl || !canvas) return;
+  const rows=getRows();
+  const weeks=buildWeeklyAgg(rows);
+  if(!weeks.length){ tblEl.innerHTML='<div style="color:var(--muted);padding:10px">No weekly data.</div>'; return; }
+
+  const last = weeks.slice(-12);
+  const labels = last.map(w=>w.ws);
+  const weeklyTarget = (T.net_sales||0) * 7;
+  charts.week=new Chart(canvas,{
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'Net Sales', data:last.map(w=>w.ns), backgroundColor:'rgba(96,165,250,.22)', borderColor:'#60a5fa', borderWidth:1.5, borderRadius:8},
+      {type:'line', label:'Target', data:last.map(()=>weeklyTarget), borderColor:'rgba(255,255,255,.18)', borderDash:[6,5], pointRadius:0, borderWidth:1.5, fill:false},
+    ]},
+    options:{responsive:true, plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.type==='line'?' Target: $'+c.parsed.y.toLocaleString('en-CA'):' $'+c.parsed.y.toLocaleString('en-CA')}}},
+      scales:{y:{ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:10},color:'#7c8db0'},grid:{color:'rgba(255,255,255,.05)'},border:{display:false}},
+              x:{ticks:{font:{size:9},color:'#7c8db0',maxRotation:0,autoSkip:true},grid:{display:false},border:{display:false}}}}
+  });
+
+  const money=v=>'$'+(v||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const rowsHtml = last.slice().reverse().map(w=>{
+    return `<tr>
+      <td>${w.ws} → ${w.we}</td>
+      <td>${money(w.ns)}</td>
+      <td>${w.orders.toLocaleString()}</td>
+      <td>${money(w.avg)}</td>
+      <td>${w.tipPct.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+  tblEl.innerHTML = `<table class="mt">
+    <thead><tr>
+      <th style="text-align:left">Week</th>
+      <th>Net Sales</th>
+      <th>Orders</th>
+      <th>Avg Order</th>
+      <th>Tip %</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════
 // EXEC SUMMARY
 // ═══════════════════════════════════════════════════
 function buildExec(totNS,totN){
@@ -962,26 +1318,173 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetail();});
 // ═══════════════════════════════════════════════════
 // GOOGLE SHEETS
 // ═══════════════════════════════════════════════════
-function openGS(){document.getElementById('gs-id').value=gsId;document.getElementById('gs-tab').value=gsTab;document.getElementById('gs-modal').classList.add('on');}
+function openGS(){
+  document.getElementById('gs-id').value=gsId;
+  document.getElementById('gs-api-key').value=gsApiKey;
+  document.getElementById('gs-tab-sales').value=gsTabSales;
+  document.getElementById('gs-tab-weekly').value=gsTabWeekly;
+  document.getElementById('gs-tab-food').value=gsTabFood;
+  const ac=document.getElementById('gs-autoconnect');
+  if(ac) ac.checked = (lsGet('gs_autoconnect','0') !== '0');
+  document.getElementById('gs-modal').classList.add('on');
+}
 function closeGS(){document.getElementById('gs-modal').classList.remove('on');}
+function extractSheetIdFromUrl(url){
+  try{
+    const m=String(url||'').match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return m?m[1]:'';
+  }catch(e){return '';}
+}
+function buildGSUrl(input, tab){
+  const t = input.trim();
+  if(t.includes('output=csv')) return t;
+  if(t.includes('/pub?')) return t + (t.includes('?')?'&':'?') + 'output=csv';
+  if(t.startsWith('2PACX-')) return `https://docs.google.com/spreadsheets/d/e/${t}/pub?output=csv`;
+  const fromUrl = t.includes('docs.google.com/spreadsheets/d/') ? extractSheetIdFromUrl(t) : '';
+  const sheetId = fromUrl || t;
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab||'2026')}`;
+}
+
+function isLikelySheetId(input){
+  const t=(input||'').trim();
+  if(!t) return false;
+  if(t.includes('docs.google.com')) return false;
+  if(t.includes('output=csv')) return false;
+  // Typical sheet id is long base64-ish; keep it permissive
+  return t.length>=20 && /^[a-zA-Z0-9-_]+$/.test(t);
+}
+
+async function fetchCSV(directUrl){
+  // GitHub Pages CSP blocks most proxies — use codetabs which is CSP-friendly
+  const attempts = [
+    () => fetch(directUrl, {mode:'cors',cache:'no-cache'}),
+    () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(directUrl)}`),
+    () => fetch(`https://corsproxy.io/?${encodeURIComponent(directUrl)}`),
+    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`),
+  ];
+  for(const attempt of attempts){
+    try{
+      const res = await attempt();
+      if(!res.ok) continue;
+      const text = await res.text();
+      if(text && text.length > 20 && !text.trim().startsWith('<')) return text;
+    } catch(e){ continue; }
+  }
+  // All proxies failed — show manual paste modal
+  return null;
+}
+
+async function fetchValuesViaSheetsApi(sheetId, tabName, apiKey){
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(tabName)}?majorDimension=ROWS&key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url, {mode:'cors', cache:'no-cache'});
+  if(!res.ok) throw new Error(`Sheets API error (${res.status}). Make sure the sheet is shared publicly (Viewer).`);
+  const json = await res.json();
+  const values = json.values || [];
+  if(!values.length) return null;
+  // Convert to CSV-like rows (array of strings)
+  const maxLen = Math.max(...values.map(r=>r.length), 0);
+  return values.map(r=>{
+    const row = new Array(maxLen).fill('');
+    r.forEach((v,i)=>row[i]=String(v==null?'':v));
+    return row;
+  });
+}
+
+function resetForGSLoad(){
+  // Clear prior computed data + filter UI so the connected sheet becomes the source of truth.
+  try{
+    Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});
+  }catch(e){}
+  charts = {};
+  daily = [];
+  ROWS.length = 0;
+  META.dates.length = 0;
+  META.weeks.length = 0;
+  META.months.length = 0;
+  META.stores.length = 0;
+  META.types = ['DINE_IN','PICKUP','UBER','DELIVERY','OTHER'];
+  META.channels = ['POS','UBEREATS','ONLINE','KIOSK'];
+  AF = {month:'',week:'',store:-1,type:-1,chan:-1,status:-1};
+  __WEEKLY_INDEX__ = null;
+  __FOOD_INDEX__ = null;
+
+  const clearSelect = (id)=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    // keep first option (usually "All")
+    while(el.options.length>1) el.remove(1);
+  };
+  clearSelect('f-month');
+  clearSelect('f-week');
+  clearSelect('f-store');
+  clearSelect('f-type');
+  clearSelect('f-chan');
+  clearSelect('f-status');
+}
+
 async function connectGS(){
-  const id=document.getElementById('gs-id').value.trim();
-  const tab=document.getElementById('gs-tab').value.trim()||'2026';
-  if(!id){alert('Please enter a Sheet ID');return;}
+  if(__GS_CONNECTING__) return;
+  __GS_CONNECTING__ = true;
+  const input=document.getElementById('gs-id').value.trim();
+  const apiKey=(document.getElementById('gs-api-key').value||'').trim();
+  const tabSales=(document.getElementById('gs-tab-sales').value||'Sales').trim()||'Sales';
+  const tabWeekly=(document.getElementById('gs-tab-weekly').value||'Weekly Summary').trim()||'Weekly Summary';
+  const tabFood=(document.getElementById('gs-tab-food').value||'Food Cost').trim()||'Food Cost';
+  const autoConnect = !!document.getElementById('gs-autoconnect')?.checked;
+  if(!input){__GS_CONNECTING__=false;alert('Please paste your published CSV URL or Sheet ID');return;}
   document.getElementById('gs-loading').classList.add('on');
   try{
-    const url=`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
-    const res=await fetch(url);
-    if(!res.ok) throw new Error('Sheet not accessible — make sure it is published to web as CSV.');
-    const csv=await res.text();
-    const parsed=parseCSV(csv);
-    if(parsed.length<2) throw new Error('No data found. Check the tab name.');
-    ingestGS(parsed);
-    gsId=id;gsTab=tab;localStorage.setItem('gs_id',id);localStorage.setItem('gs_tab',tab);
-    setGS(true,parsed.length-1+' rows loaded');
-    closeGS();buildDash();
+    resetForGSLoad();
+    let salesRows=null, weeklyRows=null, foodRows=null;
+    if(apiKey && isLikelySheetId(input)){
+      salesRows = await fetchValuesViaSheetsApi(input, tabSales, apiKey);
+      weeklyRows = await fetchValuesViaSheetsApi(input, tabWeekly, apiKey).catch(()=>null);
+      foodRows = await fetchValuesViaSheetsApi(input, tabFood, apiKey).catch(()=>null);
+      if(!salesRows || salesRows.length < 2) throw new Error('No Sales rows found. Check the Sales tab name.');
+      ingestGS(salesRows);
+      // Store extra tabs for later features (kept non-blocking)
+      window.__GS_WEEKLY__ = weeklyRows || [];
+      window.__GS_FOOD__ = foodRows || [];
+    }else{
+      const salesUrl=buildGSUrl(input,tabSales);
+      const weeklyUrl=buildGSUrl(input,tabWeekly);
+      const foodUrl=buildGSUrl(input,tabFood);
+      const [salesCsv, weeklyCsv, foodCsv] = await Promise.all([
+        fetchCSV(salesUrl),
+        fetchCSV(weeklyUrl).catch(()=>null),
+        fetchCSV(foodUrl).catch(()=>null),
+      ]);
+      if(!salesCsv){ showPasteFallback(salesUrl); document.getElementById('gs-loading').classList.remove('on'); __GS_CONNECTING__=false; return; }
+      const parsed=parseCSV(salesCsv);
+      if(parsed.length<2) throw new Error('No data rows found. Check the Sales tab name.');
+      ingestGS(parsed);
+      window.__GS_WEEKLY__ = weeklyCsv ? parseCSV(weeklyCsv) : [];
+      window.__GS_FOOD__ = foodCsv ? parseCSV(foodCsv) : [];
+    }
+
+    gsId=input;
+    gsApiKey=apiKey;
+    gsTabSales=tabSales;
+    gsTabWeekly=tabWeekly;
+    gsTabFood=tabFood;
+    lsSet('gs_id',input);
+    lsSet('gs_api_key',apiKey);
+    lsSet('gs_tab_sales',tabSales);
+    lsSet('gs_tab_weekly',tabWeekly);
+    lsSet('gs_tab_food',tabFood);
+    lsSet('gs_autoconnect', autoConnect ? '1' : '0');
+
+    initFilters();
+    // Default to most recent week
+    const lastWkIdx = META.weeks.length - 1;
+    document.getElementById('f-week').value = Math.max(0,lastWkIdx);
+    AF.week = String(Math.max(0,lastWkIdx));
+    setGS(true,(ROWS.length||0)+' rows loaded');
+    closeGS();
+    buildDash();
   }catch(e){alert('Error: '+e.message);}
   document.getElementById('gs-loading').classList.remove('on');
+  __GS_CONNECTING__ = false;
 }
 function parseCSV(csv){
   return csv.split('\n').map(line=>{
@@ -991,46 +1494,81 @@ function parseCSV(csv){
   }).filter(r=>r.length>1);
 }
 function ingestGS(rows){
+  const num=(v)=>{
+    if(v==null) return 0;
+    const s=String(v).trim();
+    if(!s) return 0;
+    // Remove currency symbols, commas, and spaces; handle (123.45) negatives
+    const neg=/^\(.*\)$/.test(s);
+    const cleaned=s.replace(/[^\d.\-]/g,'');
+    const n=parseFloat(cleaned);
+    if(isNaN(n)) return 0;
+    return neg?-n:n;
+  };
   const hdrs=rows[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_'));
   const gi=k=>hdrs.findIndex(h=>h.includes(k));
   const dI=gi('date'),tI=gi('time'),stI=gi('store'),
+        oidI=(gi('order_id')>=0?gi('order_id'):(gi('orderid')>=0?gi('orderid'):gi('order'))),
         typeI=gi('sale')>=0?gi('sale'):(gi('type')>=0?gi('type'):-1),
         chanI=gi('channel'),subI=gi('sub'),tipI=gi('tip'),feeI=gi('fee'),statI=gi('status');
-  const TYPE_MAP2={'DINE_IN':0,'PICKUP':1,'UBER':2,'DELIVERY':3,'OTHER':4};
+  const TYPE_MAP2={'DINE_IN':0,'PICKUP':1,'UBER':2,'DELIVERY':3,'ONLINE':1,'OTHER':4};
   const CHAN_MAP2={'POS':0,'UBEREATS':1,'ONLINE':2,'KIOSK':3,'UBER':1};
   const STAT_MAP2={'COMPLETED':0,'CANCELLED':1};
-  const existing=new Set(ROWS.map(r=>META.dates[r[0]]+'_'+r[3]+'_'+r[6]+'_'+r[7]));
+
+  const keyFor = ({date, storeIdx, orderId, time, sub, tips, fees, typeIdx, chanIdx, statusIdx})=>{
+    const oid = (orderId==null?'':String(orderId).trim());
+    if(oid) return `${date}|${storeIdx}|${oid}`;
+    const t = (time==null?'':String(time).trim());
+    return `${date}|${storeIdx}|${t}|${typeIdx}|${chanIdx}|${statusIdx}|${sub}|${tips}|${fees}`;
+  };
+
+  const existing=new Set(ROWS.map(r=>{
+    const date = META.dates[r[0]] || '';
+    return `${date}|${r[3]}|${r[9]}|${r[4]}|${r[5]}|${r[10]}|${r[6]}|${r[7]}|${r[8]}`;
+  }));
   let added=0;
   rows.slice(1).forEach(r=>{
     try{
       const raw=r[dI]||'';if(!raw)return;
       const date=raw.substring(0,10);
       const dt=new Date(date);if(isNaN(dt))return;
-      const dow=dt.getDay();
-      const ws=new Date(dt);ws.setDate(dt.getDate()-((dow+6)%7));
+      const dow=dt.getDay(); // 0=Sun..6=Sat
+      // Week start Monday → Sunday
+      const monOffset=(dow+6)%7;
+      const ws=new Date(dt);ws.setDate(dt.getDate()-monOffset);
       const week=ws.toISOString().substring(0,10);
       const month=date.substring(0,7);
       let dIdx=META.dates.indexOf(date);
       if(dIdx<0){META.dates.push(date);dIdx=META.dates.length-1;}
       let wIdx=META.weeks.indexOf(week);
-      if(wIdx<0){META.weeks.push(week);wIdx=META.weeks.length-1;}
+      if(wIdx<0){
+        // Defensive: prevent duplicates from races / inconsistent data
+        if(!META.weeks.includes(week)) META.weeks.push(week);
+        wIdx=META.weeks.indexOf(week);
+      }
       let mIdx=META.months.indexOf(month);
       if(mIdx<0){META.months.push(month);mIdx=META.months.length-1;}
       const storeStr=(r[stI]||'').trim();
       let sIdx=META.stores.indexOf(storeStr);
       if(sIdx<0){META.stores.push(storeStr);sIdx=META.stores.length-1;}
+      const orderId = (oidI>=0 ? r[oidI] : '');
       const rawType=(r[typeI]||'').trim().toUpperCase();
       const normT=rawType.startsWith('UBER')||rawType.startsWith('DELIV')?rawType.startsWith('UBER')?2:3:TYPE_MAP2[rawType]??4;
       const rawChan=(r[chanI]||'').trim().toUpperCase().replace(/\s+/g,'');
       const normC=rawChan.includes('UBER')?1:CHAN_MAP2[rawChan]??0;
-      const sub=Math.max(0,parseFloat(r[subI])||0);
-      const tips=parseFloat(r[tipI])||0;
-      const fees=parseFloat(r[feeI])||0;
+      const sub=Math.max(0,num(r[subI]));
+      const tips=num(r[tipI]);
+      const fees=num(r[feeI]);
       const hour=tI>=0?parseInt((r[tI]||'').split(':')[0]):-1;
       const rawStat=(r[statI]||'COMPLETED').trim().toUpperCase();
       const stat=STAT_MAP2[rawStat]??0;
-      const key=date+'_'+sIdx+'_'+sub+'_'+tips;
-      if(!existing.has(key)){ROWS.push([dIdx,wIdx,mIdx,sIdx,normT,normC,sub,tips,fees,isNaN(hour)?-1:hour,stat]);existing.add(key);added++;}
+      const key = keyFor({date,storeIdx:sIdx,orderId,time:(tI>=0?r[tI]:''),
+                          sub,tips,fees,typeIdx:normT,chanIdx:normC,statusIdx:stat});
+      if(!existing.has(key)){
+        ROWS.push([dIdx,wIdx,mIdx,sIdx,normT,normC,sub,tips,fees,isNaN(hour)?-1:hour,stat]);
+        existing.add(key);
+        added++;
+      }
     }catch(e){}
   });
   console.log('GS: added',added,'new rows');
@@ -1038,26 +1576,160 @@ function ingestGS(rows){
 function setGS(on,msg){gsOn=on;document.getElementById('gs-dot').className='gs-dot'+(on?' on':'');document.getElementById('gs-status').textContent=on?'✓ '+msg:'Not connected';}
 async function doRefresh(){
   const ic=document.getElementById('ref-icon');ic.className='spinning';ic.textContent='↻';
-  if(gsOn&&gsId){try{const url=`https://docs.google.com/spreadsheets/d/${gsId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(gsTab)}`;const res=await fetch(url);if(res.ok){const csv=await res.text();ingestGS(parseCSV(csv));setGS(true,'Refreshed');}}catch(e){}}
+  if(gsOn&&gsId){
+    try{
+      resetForGSLoad();
+      if(gsApiKey && isLikelySheetId(gsId)){
+        const salesRows = await fetchValuesViaSheetsApi(gsId, gsTabSales, gsApiKey);
+        if(salesRows){ingestGS(salesRows);setGS(true,'Refreshed');}
+        else setGS(false,'No rows found');
+      }else{
+        const url=buildGSUrl(gsId,gsTabSales);
+        const csv=await fetchCSV(url);
+        if(csv){ingestGS(parseCSV(csv));setGS(true,'Refreshed');}
+        else setGS(false,'Proxy blocked — use manual paste');
+      }
+      initFilters();
+    }catch(e){}
+  }
   buildDash();
   setTimeout(()=>{ic.className='';ic.textContent='↻';},800);
 }
-if(gsId){setTimeout(async()=>{try{const url=`https://docs.google.com/spreadsheets/d/${gsId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(gsTab)}`;const res=await fetch(url);if(res.ok){const csv=await res.text();ingestGS(parseCSV(csv));setGS(true,'Auto-connected');buildDash();}}catch(e){};},600);}
+if(gsId){
+  setTimeout(async()=>{
+    try{
+      resetForGSLoad();
+      if(gsApiKey && isLikelySheetId(gsId)){
+        const salesRows = await fetchValuesViaSheetsApi(gsId, gsTabSales, gsApiKey);
+        if(salesRows){ingestGS(salesRows);setGS(true,'Auto-connected');}
+      }else{
+        const url=buildGSUrl(gsId,gsTabSales);
+        const csv=await fetchCSV(url);
+        if(csv){ingestGS(parseCSV(csv));setGS(true,'Auto-connected');}
+      }
+      initFilters();
+      const lastWkIdx = META.weeks.length - 1;
+      document.getElementById('f-week').value = Math.max(0,lastWkIdx);
+      AF.week = String(Math.max(0,lastWkIdx));
+      buildDash();
+    }catch(e){}
+  },600);
+}
 
 // ═══════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════
-function destroyC(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function destroyC(id){
+  try{
+    for(const k of Object.keys(charts)){
+      const c=charts[k];
+      const canvasId = c && c.canvas && c.canvas.id;
+      if(k===id || canvasId===id){
+        try{c.destroy();}catch(e){}
+        delete charts[k];
+      }
+    }
+  }catch(e){}
+}
 
 // ═══════════════════════════════════════════════════
 // START — default to most recent week
 // ═══════════════════════════════════════════════════
-initFilters();
-// Find and select the last week index
-const lastWkIdx = META.weeks.length - 1;
-document.getElementById('f-week').value = lastWkIdx;
-AF.week = String(lastWkIdx);
-buildDash();
+// Start with no data. Ask user to connect Google Sheets, then save settings.
+resetForGSLoad();
+setGS(false, 'Not connected');
+try{
+  const savedId = lsGet('gs_id','').trim();
+  const auto = lsGet('gs_autoconnect','0') !== '0';
+  if(savedId && auto){
+    // Pre-fill modal fields then connect immediately.
+    const idEl=document.getElementById('gs-id');
+    const apiEl=document.getElementById('gs-api-key');
+    const sEl=document.getElementById('gs-tab-sales');
+    const wEl=document.getElementById('gs-tab-weekly');
+    const fEl=document.getElementById('gs-tab-food');
+    if(idEl) idEl.value = savedId;
+    if(apiEl) apiEl.value = lsGet('gs_api_key','');
+    if(sEl) sEl.value = lsGet('gs_tab_sales','Sales');
+    if(wEl) wEl.value = lsGet('gs_tab_weekly','Weekly Summary');
+    if(fEl) fEl.value = lsGet('gs_tab_food','Food Cost');
+    connectGS();
+  }else{
+    openGS();
+  }
+}catch(e){
+  openGS();
+}
+</script>
+
+<!-- PASTE FALLBACK MODAL -->
+<div class="modal-ov" id="paste-modal">
+  <div class="modal" style="width:580px;max-width:95vw">
+    <h3>📋 Manual CSV Paste</h3>
+    <p style="color:#a0aec0;font-size:12px;line-height:1.6;margin-bottom:14px">
+      Your browser is blocking the automatic connection (GitHub Pages security policy). 
+      Here's how to load your data in 3 steps:<br><br>
+      <strong style="color:#60a5fa">Step 1:</strong> Open your published CSV URL in a new tab:<br>
+      <span id="paste-url" style="font-size:10px;word-break:break-all;color:#fbbf24;font-family:monospace;display:block;background:rgba(255,255,255,0.05);padding:6px 8px;border-radius:6px;margin:6px 0"></span>
+      <button onclick="openCsvUrl()" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 14px;font-size:11px;cursor:pointer;font-family:var(--font);margin:4px 0 10px">Open URL in new tab ↗</button><br>
+      <strong style="color:#60a5fa">Step 2:</strong> Select all the text on that page (Ctrl+A / Cmd+A) and copy it (Ctrl+C / Cmd+C)<br><br>
+      <strong style="color:#60a5fa">Step 3:</strong> Paste it in the box below and click Load
+    </p>
+    <textarea id="paste-csv" rows="7" placeholder="Paste your CSV data here (Ctrl+V / Cmd+V)..." 
+      style="width:100%;background:rgba(15,17,23,0.8);border:1px solid rgba(255,255,255,0.13);color:#e8edf5;
+      border-radius:8px;padding:10px 13px;font-size:11px;font-family:monospace;resize:vertical;
+      margin-bottom:12px;line-height:1.5"></textarea>
+    <div id="paste-count" style="font-size:11px;color:#7c8db0;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" onclick="closePasteModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="loadPastedCSV()">Load Data</button>
+    </div>
+  </div>
+</div><script>
+// ── PASTE FALLBACK ──
+let _pasteUrl = '';
+let _pasteKind = 'sales';
+function showPasteFallback(url, kind='sales'){
+  _pasteUrl = url;
+  _pasteKind = kind;
+  document.getElementById('paste-url').textContent = url;
+  document.getElementById('paste-csv').value = '';
+  document.getElementById('paste-count').textContent = '';
+  const h=document.querySelector('#paste-modal h3');
+  if(h){
+    h.textContent = kind==='weekly' ? '📋 Manual CSV Paste (Weekly Summary)' :
+                   kind==='food' ? '📋 Manual CSV Paste (Food Cost)' :
+                   '📋 Manual CSV Paste (Sales)';
+  }
+  document.getElementById('paste-modal').classList.add('on');
+  closeGS();
+}
+function openCsvUrl(){ window.open(_pasteUrl, '_blank'); }
+function closePasteModal(){ document.getElementById('paste-modal').classList.remove('on'); }
+document.getElementById('paste-csv')?.addEventListener('input', function(){
+  const lines = this.value.trim().split('\n').length;
+  document.getElementById('paste-count').textContent = lines > 1 ? (lines-1).toLocaleString()+' rows detected' : '';
+});
+function loadPastedCSV(){
+  const raw = document.getElementById('paste-csv').value.trim();
+  if(!raw){ alert('Please paste your CSV data first.'); return; }
+  const parsed = parseCSV(raw);
+  if(parsed.length < 2){ alert('No data rows found. Make sure you copied the full page content.'); return; }
+  if(_pasteKind==='weekly'){
+    window.__GS_WEEKLY__ = parsed;
+    __WEEKLY_INDEX__ = null;
+    setGS(true, 'Weekly Summary loaded (manual)');
+  }else if(_pasteKind==='food'){
+    window.__GS_FOOD__ = parsed;
+    __FOOD_INDEX__ = null;
+    setGS(true, 'Food Cost loaded (manual)');
+  }else{
+    ingestGS(parsed);
+    setGS(true, (parsed.length-1).toLocaleString()+' rows loaded (manual)');
+  }
+  closePasteModal();
+  buildDash();
+}
 </script>
 </body>
 </html>
